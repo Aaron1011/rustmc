@@ -1,0 +1,12 @@
+[package]
+
+name = "rustmc"
+version = "0.0.1"
+authors = [ "aa1ronham@gmail.com" ]
+
+[[bin]]
+
+name = "rustmc" # the name of the executable to generate
+
+#[dependencies.sodiumoxide]
+#git = "https://github.com/dnaq/sodiumoxide.git"

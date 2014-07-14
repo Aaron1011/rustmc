@@ -1,6 +1,13 @@
 extern crate getopts;
+extern crate term;
+extern crate serialize;
 
 use std::os;
+
+mod conn;
+mod packet;
+mod util;
+mod json;
 
 static DEFAULT_NAME: &'static str = "rustmc-bot";
 static DEFAULT_HOST: &'static str = "127.0.0.1";
@@ -37,6 +44,13 @@ fn main() {
     let name = matches.opt_str("name").unwrap_or(DEFAULT_NAME.to_string());
     let host = matches.opt_str("server").unwrap_or(DEFAULT_HOST.to_string());
     let port = matches.opt_str("port").map_or(DEFAULT_PORT, |x| from_str(x.as_slice()).expect("invalid port"));
+
+    match conn::Connection::new(name.as_slice(), host.as_slice(), port) {
+        Ok(ref mut c) if status => c.status(),
+        Ok(c) => c.run(),
+        Err(e) => fail!("Unable to connect to server: {}.", e)
+    }
+
 
     println!("Status: {}, name: {}, host: {}, port: {}", status, name, host, port)
 }

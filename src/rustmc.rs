@@ -1,10 +1,13 @@
 extern crate getopts;
 extern crate term;
 extern crate serialize;
+extern crate openssl;
+extern crate serialize;
 
 use std::os;
 
 mod conn;
+mod crypto;
 mod packet;
 mod util;
 mod json;

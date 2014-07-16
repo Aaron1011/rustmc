@@ -1,30 +1,39 @@
 use std::io::{Reader, Writer};
 use std::str;
 
+use openssl::crypto::hash;
+use openssl::crypto::hash::Hasher;
+
+use serialize::hex::ToHex;
+
 //use crypto;
 
-/*impl crypto::SHA1 {
-    pub fn special_digest(self) -> Box<str> {
-        let mut digest = self.final();
+pub fn special_digest(hasher: Hasher) -> String {
+    let mut digest = hasher.final();
 
-        let neg = (digest[0] & 0x80) == 0x80;
-        if neg {
-            let mut carry = true;
-            for x in digest.mut_iter().rev() {
-                *x = !*x;
-                if carry {
-                    carry = *x == 0xFF;
-                    *x = *x + 1;
-                }
+    let neg = (digest.get(0) & 0x80) == 0x80;
+    if neg {
+        let mut carry = true;
+        for x in digest.mut_iter().rev() {
+            *x = !*x;
+            if carry {
+                carry = *x == 0xFF;
+                *x = *x + 1;
             }
         }
-
-        let digest = crypto::SHA1::hex(digest);
-        let digest = digest.trim_left_chars(&'0').to_owned();
-
-        if neg { "-" + digest } else { digest }
     }
-}*/
+
+    let digest = digest.as_slice().to_hex();
+
+    //let digest = hash::hash(hash::SHA1, digest);i
+    /*match digest.as_slice().position_elem(&0) {
+        Some(pos) => digest.remove(pos),
+        None => Some(0)
+    };*/
+    let digest = digest.as_slice().trim_left_chars('0').to_owned();
+
+    if neg { "-".to_string().append(digest.as_slice()) } else { digest }
+}
 
 pub trait WriterExtensions: Writer {
     fn write_varint(&mut self, mut x: i32) {

@@ -45,8 +45,9 @@ impl<T: Reader> Reader for AesStream<T> {
 
 impl<T: Writer> Writer for AesStream<T> {
     fn write(&mut self, buf: &[u8]) -> io::IoResult<()> {
-        self.encrypt.update(buf);
-        self.stream.write(self.encrypt.final().as_slice())
+        let data = self.encrypt.update(buf);
+        self.encrypt.final();
+        self.stream.write(data.as_slice())
     }
 
     fn flush(&mut self) -> io::IoResult<()> {

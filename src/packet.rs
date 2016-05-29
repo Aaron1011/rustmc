@@ -4,6 +4,7 @@ use std::boxed::Box;
 use rustc_serialize::json;
 use util::Either;
 use util::WriterExtensions;
+use std::marker::PhantomData;
 
 /**
  * The Packet struct has a type parameter that isn't used in any
@@ -29,14 +30,16 @@ pub type InPacket = Packet<In>;
 pub type OutPacket = Packet<Out>;
 
 pub struct Packet<T> {
-    buf: Either<Box<Read>, Box<Write>>,
-    packetType: T
+    pub buf: Either<Box<Read>, Box<Write>>,
+    phantom: PhantomData<T>
+    //packetType: T
 }
 
 impl Packet<In> {
     pub fn new_in(buf: Vec<u8>) -> Packet<In> {
         Packet {
-            buf: Either::Left(BufReader::new(buf))
+            buf: Either::Left(Box::new(BufReader::new(buf.as_slice()))),
+            //packetType: In
         }
     }
 }
@@ -44,7 +47,8 @@ impl Packet<In> {
 impl Packet<Out> {
     pub fn new_out(packet_id: i32) -> Packet<Out> {
         let mut p = Packet {
-            buf: Either::Right(BufWriter::new())
+            buf: Either::Right(Box::new(Vec::new())),
+            //packetType: Out
         };
         p.write_varint(packet_id);
 
@@ -52,7 +56,7 @@ impl Packet<Out> {
     }
 
     pub fn buf(self) -> Vec<u8> {
-        self.buf.unwrap_right().unwrap()
+        self.buf.unwrap_right();
     }
 }
 

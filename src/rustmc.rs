@@ -4,7 +4,9 @@ extern crate serialize;
 extern crate openssl;
 extern crate rand;
 extern crate rustc_serialize;
+extern crate byteorder;
 
+use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use std::os;
 use std::env;
 use getopts::Options;

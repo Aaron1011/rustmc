@@ -1,6 +1,8 @@
 use std::io::{Read, Write};
 use std::str;
 
+use std::str::FromStr;
+
 use openssl::crypto::hash;
 use openssl::crypto::hash::Hasher;
 
@@ -9,12 +11,12 @@ use serialize::hex::ToHex;
 //use crypto;
 
 pub fn special_digest(hasher: Hasher) -> String {
-    let mut digest = hasher.final();
+    let mut digest = hasher.finish();
 
-    let neg = (digest.get(0) & 0x80) == 0x80;
+    let neg = (digest.get(0).unwrap() & 0x80) == 0x80;
     if neg {
         let mut carry = true;
-        for x in digest.mut_iter().rev() {
+        for x in digest.iter_mut().rev() {
             *x = !*x;
             if carry {
                 carry = *x == 0xFF;
@@ -30,14 +32,21 @@ pub fn special_digest(hasher: Hasher) -> String {
         Some(pos) => digest.remove(pos),
         None => Some(0)
     };*/
-    let digest = digest.as_slice().trim_left_chars('0').to_owned();
+    let digest = String::from_str(digest.trim_left_matches('0')).unwrap();
 
-    if neg { "-".to_string().append(digest.as_slice()) } else { digest }
+
+    if neg {
+        let a = "-".to_string();
+        a.push_str(digest.as_str());
+        a
+    } else {
+        digest
+    }
 }
 
 pub trait WriterExtensions: Write {
     fn write_varint(&mut self, mut x: i32) {
-        let mut buf = [0u8, ..10];
+        let mut buf = [0u8, 10];
         let mut i = 0;
         if x < 0 {
             x = x + (1 << 32);
@@ -49,7 +58,7 @@ pub trait WriterExtensions: Write {
         }
         buf[i] = x as u8;
 
-        self.write(buf.slice_to(i + 1));
+        self.write(&buf[i + 1 .. 10]);
     }
 
     fn write_string(&mut self, s: &str) {
@@ -63,11 +72,13 @@ impl<T: Write> WriterExtensions for T {}
 pub trait ReaderExtensions: Read {
     fn read_varint(&mut self) -> i32 {
         let (mut total, mut shift, mut val) = (0, 0, 0x80);
-
+        let mut buf = [0; 1];
         while (val & 0x80) != 0 {
-            val = self.read_u8().unwrap() as i32;
+            self.read_exact(&mut buf);
+            val = buf[0] as i32;
             total = total | ((val & 0x7F) << shift);
             shift = shift + 7;
+            buf = [0; 1]
         }
 
         if (total & (1 << 31)) != 0 {
@@ -79,9 +90,20 @@ pub trait ReaderExtensions: Read {
 
     fn read_string(&mut self) -> String {
         let len = self.read_varint();
-        let buf = self.read_exact(len as u64).unwrap();
+        let buf = Vec::new();
+        self.take(len as u64).read_to_end(&mut buf);
 
-        str::from_utf8_owned(buf.move_iter().collect()).unwrap()
+        //let buf = repeat(0).take(len).collect::<Vec<_>>().as_mut_slice();
+        //let a = self.read_exact(buf);
+
+        return String::from_utf8(buf).unwrap();
+    }
+
+    fn read_len(&mut self, len: u64) -> &mut [u8] {
+        let buf = Vec::new();
+        self.take(len).read_to_end(&mut buf);
+
+        buf.as_mut_slice();
     }
 }
 

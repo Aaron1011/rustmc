@@ -13,10 +13,10 @@ pub struct AesStream {
 
 impl AesStream {
     pub fn new(s: TcpStream, key: Vec<u8>) -> AesStream {
-        let encrypt = Crypter::new(Type::AES_128_CFB);
-        let decrypt = Crypter::new(Type::AES_128_CFB);
-        encrypt.init(Mode::Encrypt, key.as_slice(), key.clone());
-        decrypt.init(Mode::Decrypt, key.as_slice(), key.clone());
+        let encrypt = Crypter::new(Type::AES_128_CFB1);
+        let decrypt = Crypter::new(Type::AES_128_CFB1);
+        encrypt.init(Mode::Encrypt, key.as_slice(), key.as_slice());
+        decrypt.init(Mode::Decrypt, key.as_slice(), key.as_slice());
         AesStream {
             stream: s,
             encrypt: encrypt,
@@ -28,9 +28,10 @@ impl AesStream {
 
 impl Read for AesStream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        let ein = self.stream.read_exact(buf.len()).unwrap();
-        let din =self.decrypt.update(ein.as_slice());
-        self.decrypt.final();
+        self.stream.read_exact(buf);
+        //let ein = self.stream.read_exact(buf.len()).unwrap();
+        let din =self.decrypt.update(buf);
+        self.decrypt.finalize();
         //let din = self.decrypt.final();
         /*let din = match self.cipher.decrypt(ein.as_slice()) {
             Ok(d) => d,
@@ -46,7 +47,7 @@ impl Read for AesStream {
 impl  Write for AesStream {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let data = self.encrypt.update(buf);
-        self.encrypt.final();
+        self.encrypt.finalize();
         self.stream.write(data.as_slice())
     }
 

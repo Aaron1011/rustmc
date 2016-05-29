@@ -2,17 +2,11 @@ use std::io;
 
 use std::io::net::tcp::TcpStream;
 use std::string::String;
-use std::option;
 use std::str;
 use openssl::crypto::hash::Hasher;
-
-use serialize::base64::ToBase64;
+use std::collections::HashMap;
 
 use serialize::json;
-use serialize::base64;
-
-use std::fmt;
-
 
 use packet;
 use crypto;
@@ -21,26 +15,33 @@ use std::rand;
 use std::rand::Rng;
 use packet::Packet;
 use util::{ReaderExtensions, WriterExtensions, special_digest};
-use std::io::stdio::StdWriter;
-use std::io::{BufferedReader, LineBufferedWriter, Reader, Writer, timer};
+use std::io::{BufferedReader, Reader, Writer};
 use openssl::crypto::pkey;
 use openssl::crypto::hash::SHA1;
-use openssl::crypto::symm;
-use openssl::crypto::symm::Crypter;
-use std::io::process;
 use std::io::Command;
 use std::comm;
-use json::ExtraJSON;
 use term;
-use term::terminfo;
 
+#[deriving(Hash, Eq, PartialEq, Show)]
+pub struct Position {
+    x: int,
+    y: int,
+    z: int
+}
+
+#[deriving(Hash, Eq, PartialEq, Show)]
+pub struct Entity {
+    pos: Position,
+    kind: u8
+}
 
 pub struct Connection {
     host: String,
     sock: Option<Sock>,
     name: String,
     port: u16,
-    term: Box<term::Terminal<term::WriterWrapper>>
+    term: Box<term::Terminal<term::WriterWrapper>>,
+    entities: HashMap<int, Entity>
 }
 
 enum Sock {
@@ -67,13 +68,16 @@ impl Connection {
             None => return Err(String::from_str("Terminal could not be created"))
         };
 
+        let mut e = HashMap::new();
+
 
         Ok(Connection {
             host: String::from_str(host),
             sock: Some(Plain(sock)),
             name: String::from_str(name),
             port: port,
-            term: t
+            term: t,
+            entities: e
         })
     }
 
@@ -97,6 +101,10 @@ impl Connection {
                 Err(e) => fail!("Failed to execute process: {}", e)
             };
 
+        /*match self.read_u8() {
+            Ok(v) => v as i32,
+            Err(e) => fail!("Error: {}", e)
+        }*/
         // write json to stdin and close it
         p.stdin.get_mut_ref().write(format!(r#"
             {{
@@ -184,6 +192,7 @@ impl Connection {
         // we need to do authentication and
         // enable encryption
         self.login();
+        self.respawn();
 
         // Get a port to read messages from stdin
         let msgs = self.read_messages();
@@ -216,7 +225,8 @@ impl Connection {
                         }
                     }
                     /*Err(err) => match err {
-                        comm::TryRecvErr => 'msg,
+                        com
+                        println!("Food")m::TryRecvErr => 'msg,
                         _ => continue
                     }*/
                     //comm::Disconnected => fail!("input stream disconnected")
@@ -240,6 +250,63 @@ impl Connection {
             self.write_packet(resp);
 
         // Chat Message
+        } else if packet_id == 0x01 {
+            println!("Joined!!")
+            let id = packet.read_be_int_n(4);
+            println!("Id")
+            let gamemode = packet.read_be_uint_n(1);
+            println!("Gamemode")
+            let dimension = packet.read_be_int_n(1);
+            println!("Dimm")
+            let difficulty = packet.read_be_uint_n(1);
+            println!("Diff")
+            let players = packet.read_be_uint_n(1);
+            println!("Players")
+            //let level = packet.read_to_end();
+            //println!("Data: {}", level)
+            let level = packet.read_string();
+            println!("Join game: {} {} {} {} {} {}", id, gamemode, dimension, difficulty, players, level)
+        } else if packet_id == 0x06 {
+            println!("Food")
+            let health = packet.read_be_f32().unwrap();
+            let food = packet.read_be_int_n(2).unwrap();
+            let sat = packet.read_be_f32().unwrap();
+            println!("Health: {}, Food: {}, Saturation: {}", health, food, sat)
+        } else if packet_id == 0x0F {
+            println!("Mob spawn!")
+            let id = packet.read_varint();
+            let type_ = packet.read_be_uint_n(1).unwrap();
+
+            let pos = Position{x: 0, y: 0, z: 0};
+            let entity = Entity{pos: pos, kind: type_ as u8};
+            println!("Type of entity: {}", type_)
+
+            self.entities.insert(id as int, entity);
+
+            let mut p = Packet::new_out(0x02);
+            p.write_be_i32(id);
+            p.write_i8(1 as i8);
+            println!("Hitting: {}", type_)
+            self.write_packet(p);
+
+            println!("Id: {}, Type: {}", id, type_)
+        } else if packet_id == 0x15 {
+            let id = packet.read_be_int_n(4).unwrap();
+            let entity = self.entities.get(&(id as int));
+            let mut p = Packet::new_out(0x02);
+            p.write_be_i32(id as i32);
+            p.write_i8(1 as i8);
+            println!("Hitting - don't move!: {}", entity.kind)
+            self.write_packet(p);
+        } else if packet_id == 0x13 {
+            let count = packet.read_varint();
+            println!("Removing: {}", count);
+        } else if packet_id == 0x05 {
+            println!("Spawn coord")
+            let x = packet.read_be_int_n(4);
+            let y = packet.read_be_int_n(4);
+            let z = packet.read_be_int_n(4);
+            println!("Spawn: {} {} {}", x, y, z)
         } else if packet_id == 0x2 {
             let json = packet.read_string();
             println!("Got chat message: {}", json);
@@ -293,6 +360,14 @@ impl Connection {
 
         self.write_packet(p);
     }
+
+    fn respawn(&mut self) {
+        println!("Respawning!")
+        let mut p = Packet::new_out(0x16);
+        p.write_u8(0);
+        self.write_packet(p);
+    }
+
 
     fn enable_encryption(&mut self, packet: &mut packet::InPacket) {
 

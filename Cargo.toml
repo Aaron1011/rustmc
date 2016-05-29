@@ -10,3 +10,6 @@ name = "rustmc" # the name of the executable to generate
 
 #[dependencies.sodiumoxide]
 #git = "https://github.com/dnaq/sodiumoxide.git"
+
+[dependencies.openssl]
+git = "https://github.com/sfackler/rust-openssl"

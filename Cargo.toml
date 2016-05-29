@@ -13,3 +13,9 @@ name = "rustmc" # the name of the executable to generate
 
 [dependencies.openssl]
 git = "https://github.com/sfackler/rust-openssl"
+
+[dependencies]
+rand = "0.3"
+rustc-serialize = "0.3"
+getopts = "0.2"
+term = "0.2"

@@ -1,7 +1,8 @@
 use std::io;
-use std::io::{MemReader, MemWriter, Reader, Writer};
-
-use util::{Either, Left, Right};
+use std::io::{BufReader, BufWriter, Read, Write};
+use std::boxed::Box;
+use rustc_serialize::json;
+use util::Either;
 use util::WriterExtensions;
 
 /**
@@ -28,13 +29,14 @@ pub type InPacket = Packet<In>;
 pub type OutPacket = Packet<Out>;
 
 pub struct Packet<T> {
-    buf: Either<MemReader, MemWriter>
+    buf: Either<Box<Read>, Box<Write>>,
+    packetType: T
 }
 
 impl Packet<In> {
     pub fn new_in(buf: Vec<u8>) -> Packet<In> {
         Packet {
-            buf: Left(MemReader::new(buf))
+            buf: Either::Left(BufReader::new(buf))
         }
     }
 }
@@ -42,7 +44,7 @@ impl Packet<In> {
 impl Packet<Out> {
     pub fn new_out(packet_id: i32) -> Packet<Out> {
         let mut p = Packet {
-            buf: Right(MemWriter::new())
+            buf: Either::Right(BufWriter::new())
         };
         p.write_varint(packet_id);
 
@@ -54,27 +56,27 @@ impl Packet<Out> {
     }
 }
 
-impl Reader for Packet<In> {
-    fn read(&mut self, buf: &mut [u8]) -> io::IoResult<uint> {
+impl Read for Packet<In> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.buf {
-            Left(ref mut r) => r.read(buf),
-            Right(..) => unreachable!()
+            Either::Left(ref mut r) => r.read(buf),
+            Either::Right(..) => unreachable!()
         }
     }
 }
 
-impl Writer for Packet<Out> {
-    fn write(&mut self, buf: &[u8]) -> io::IoResult<()> {
+impl Write for Packet<Out> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self.buf {
-            Left(..) => unreachable!(),
-            Right(ref mut w) => w.write(buf)
+            Either::Left(..) => unreachable!(),
+            Either::Right(ref mut w) => w.write(buf)
         }
     }
 
-    fn flush(&mut self) -> io::IoResult<()> {
+    fn flush(&mut self) -> io::Result<()> {
         match self.buf {
-            Left(..) => unreachable!(),
-            Right(ref mut w) => w.flush()
+            Either::Left(..) => unreachable!(),
+            Either::Right(ref mut w) => w.flush()
         }
     }
 }

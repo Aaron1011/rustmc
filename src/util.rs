@@ -1,4 +1,4 @@
-use std::io::{Reader, Writer};
+use std::io::{Read, Write};
 use std::str;
 
 use openssl::crypto::hash;
@@ -35,7 +35,7 @@ pub fn special_digest(hasher: Hasher) -> String {
     if neg { "-".to_string().append(digest.as_slice()) } else { digest }
 }
 
-pub trait WriterExtensions: Writer {
+pub trait WriterExtensions: Write {
     fn write_varint(&mut self, mut x: i32) {
         let mut buf = [0u8, ..10];
         let mut i = 0;
@@ -58,9 +58,9 @@ pub trait WriterExtensions: Writer {
     }
 }
 
-impl<T: Writer> WriterExtensions for T {}
+impl<T: Write> WriterExtensions for T {}
 
-pub trait ReaderExtensions: Reader {
+pub trait ReaderExtensions: Read {
     fn read_varint(&mut self) -> i32 {
         let (mut total, mut shift, mut val) = (0, 0, 0x80);
 
@@ -79,13 +79,13 @@ pub trait ReaderExtensions: Reader {
 
     fn read_string(&mut self) -> String {
         let len = self.read_varint();
-        let buf = self.read_exact(len as uint).unwrap();
+        let buf = self.read_exact(len as u64).unwrap();
 
         str::from_utf8_owned(buf.move_iter().collect()).unwrap()
     }
 }
 
-impl<T: Reader> ReaderExtensions for T {}
+impl<T: Read> ReaderExtensions for T {}
 
 pub enum Either<L, R> {
     Left(L),
@@ -95,15 +95,15 @@ pub enum Either<L, R> {
 impl<L, R> Either<L, R> {
     pub fn unwrap_left(self) -> L {
         match self {
-            Left(x) => x,
-            Right(_) => fail!("tried to unwrap left but got right")
+            Either::Left(x) => x,
+            Either::Right(_) => panic!("tried to unwrap left but got right")
         }
     }
 
     pub fn unwrap_right(self) -> R {
         match self {
-            Left(_) => fail!("tried to unwrap right but got left"),
-            Right(x) => x
+            Either::Left(_) => panic!("tried to unwrap right but got left"),
+            Either::Right(x) => x
         }
     }
 }

@@ -1,22 +1,22 @@
 use std::io;
-use std::io::{Reader, Writer, Stream};
-use openssl::crypto::symm;
-use openssl::crypto::symm::Crypter;
+use std::io::{Read, Write, Result};
+use std::net::TcpStream;
+use openssl::crypto::symm::{Type, Mode, Crypter};
 
 
-pub struct AesStream<T> {
-    stream: T,
+pub struct AesStream {
+    stream: TcpStream,
     encrypt: Crypter,
     decrypt: Crypter,
     key: Vec<u8>
 }
 
-impl<T: Stream> AesStream<T> {
-    pub fn new(s: T, key: Vec<u8>) -> AesStream<T> {
-        let encrypt = Crypter::new(symm::AES_128_CFB);
-        let decrypt = Crypter::new(symm::AES_128_CFB);
-        encrypt.init(symm::Encrypt, key.as_slice(), key.clone());
-        decrypt.init(symm::Decrypt, key.as_slice(), key.clone());
+impl AesStream {
+    pub fn new(s: TcpStream, key: Vec<u8>) -> AesStream {
+        let encrypt = Crypter::new(Type::AES_128_CFB);
+        let decrypt = Crypter::new(Type::AES_128_CFB);
+        encrypt.init(Mode::Encrypt, key.as_slice(), key.clone());
+        decrypt.init(Mode::Decrypt, key.as_slice(), key.clone());
         AesStream {
             stream: s,
             encrypt: encrypt,
@@ -26,8 +26,8 @@ impl<T: Stream> AesStream<T> {
     }
 }
 
-impl<T: Reader> Reader for AesStream<T> {
-    fn read(&mut self, buf: &mut [u8]) -> io::IoResult<uint> {
+impl Read for AesStream {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let ein = self.stream.read_exact(buf.len()).unwrap();
         let din =self.decrypt.update(ein.as_slice());
         self.decrypt.final();
@@ -43,14 +43,14 @@ impl<T: Reader> Reader for AesStream<T> {
     }
 }
 
-impl<T: Writer> Writer for AesStream<T> {
-    fn write(&mut self, buf: &[u8]) -> io::IoResult<()> {
+impl  Write for AesStream {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let data = self.encrypt.update(buf);
         self.encrypt.final();
         self.stream.write(data.as_slice())
     }
 
-    fn flush(&mut self) -> io::IoResult<()> {
+    fn flush(&mut self) -> Result<()> {
         self.stream.flush()
     }
 }

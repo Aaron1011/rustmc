@@ -1,9 +1,10 @@
 use std::io;
+use std::io::{Error, ErrorKind};
 
-use std::io::net::tcp::TcpStream;
+use std::net::TcpStream;
 use std::string::String;
 use std::str;
-use openssl::crypto::hash::Hasher;
+use openssl::crypto::hash::{Hasher, Type};
 use std::collections::HashMap;
 
 use serialize::json;
@@ -11,25 +12,26 @@ use serialize::json;
 use packet;
 use crypto;
 use openssl;
-use std::rand;
-use std::rand::Rng;
+use rand;
+use rand::Rng;
 use packet::Packet;
 use util::{ReaderExtensions, WriterExtensions, special_digest};
-use std::io::{BufferedReader, Reader, Writer};
+use std::io::{BufRead, Read, Write};
+use std::sync::mpsc::Receiver;
 use openssl::crypto::pkey;
-use openssl::crypto::hash::SHA1;
-use std::io::Command;
-use std::comm;
+use std::process::Command;
+use std::sync::mpsc;
+use std::thread;
 use term;
 
-#[deriving(Hash, Eq, PartialEq, Show)]
+#[derive(Hash, Eq, PartialEq, Debug)]
 pub struct Position {
-    x: int,
-    y: int,
-    z: int
+    x: i64,
+    y: i64,
+    z: i64
 }
 
-#[deriving(Hash, Eq, PartialEq, Show)]
+#[derive(Hash, Eq, PartialEq, Debug)]
 pub struct Entity {
     pos: Position,
     kind: u8
@@ -40,19 +42,19 @@ pub struct Connection {
     sock: Option<Sock>,
     name: String,
     port: u16,
-    term: Box<term::Terminal<term::WriterWrapper>>,
-    entities: HashMap<int, Entity>
+    term: Box<term::StdoutTerminal>,
+    entities: HashMap<i64, Entity>
 }
 
 enum Sock {
     Plain(TcpStream),
-    Encrypted(crypto::AesStream<TcpStream>)
+    Encrypted(crypto::AesStream)
 }
 
 impl Connection {
     pub fn new(name: &str, host: &str, port: u16) -> Result<Connection, String> {
 
-        println!("Connecting to server")
+        println!("Connecting to server");
 
         let sock = TcpStream::connect(host, port);
 
@@ -61,7 +63,7 @@ impl Connection {
                 Err(e) => return Err(format!("{} - {}", e.kind, e.desc))
         };
 
-        println!("Connected!")
+        println!("Connected!");
 
         let t = match term::stdout() {
             Some(t) => t,
@@ -73,7 +75,7 @@ impl Connection {
 
         Ok(Connection {
             host: String::from_str(host),
-            sock: Some(Plain(sock)),
+            sock: Some(Sock::Plain(sock)),
             name: String::from_str(name),
             port: port,
             term: t,
@@ -98,12 +100,12 @@ impl Connection {
             args(&["-d".to_string(), "@-".to_string(), "-H".to_string(), "Content-Type:application/json".to_string(), url]).
             spawn() {
                 Ok(p) => p,
-                Err(e) => fail!("Failed to execute process: {}", e)
+                Err(e) => panic!("paniced to execute process: {}", e)
             };
 
         /*match self.read_u8() {
             Ok(v) => v as i32,
-            Err(e) => fail!("Error: {}", e)
+            Err(e) => panic!("Error: {}", e)
         }*/
         // write json to stdin and close it
         p.stdin.get_mut_ref().write(format!(r#"
@@ -114,7 +116,7 @@ impl Connection {
                 }},
                 "username": "{}",
                 "password": "{}"
-            }}"#, "Aaron1011", "aaron11").as_bytes()); // XXX: Don't hardcode these...
+            }}"#, "Aaron1011", "xxx").as_bytes());
         p.stdin = None;
 
         // read response
@@ -145,7 +147,7 @@ impl Connection {
             args(&["-d".to_string(), "@-".to_string(), "-H".to_string(), "Content-Type:application/json".to_string(), url]).
             spawn() {
                 Ok(p) => p,
-                Err(e) => fail!("Failed to execute process: {}", e)
+                Err(e) => panic!("paniced to execute process: {}", e)
             };
 
 
@@ -158,22 +160,22 @@ impl Connection {
             }}"#, token, profile, hash).as_bytes());
         p.stdin = None;
 
-        println!("Starting")
+        println!("Starting");
 
         // read response
         p.wait_with_output();//.unwrap().output;
-        println!("Done")
+        println!("Done");
         //let out = str::from_utf8_owned(out.move_iter().collect()).unwrap();
         //println!("Got - {}", out);
     }
 
     fn read_messages(&self) -> Receiver<String> {
-        let (chan, port) = comm::channel();
+        let (chan, port) = mpsc::channel();
 
-        spawn(proc() {
+        thread::spawn(move || {
             println!("Type message and then [ENTER] to send:");
 
-            let mut stdin = BufferedReader::new(io::stdin());
+            let mut stdin = BufRead::new(io::stdin());
             for line in stdin.lines() {
                 match line {
                     Ok(text) => chan.send(text),
@@ -221,7 +223,7 @@ impl Connection {
                     Err(ref err) => {
                         match err {
                             Empty => break 'msg,
-                            //_ => fail!("Input disconnected")
+                            //_ => panic!("Input disconnected")
                         }
                     }
                     /*Err(err) => match err {
@@ -229,7 +231,7 @@ impl Connection {
                         println!("Food")m::TryRecvErr => 'msg,
                         _ => continue
                     }*/
-                    //comm::Disconnected => fail!("input stream disconnected")
+                    //comm::Disconnected => panic!("input stream disconnected")
                 }
             }
 
@@ -251,62 +253,62 @@ impl Connection {
 
         // Chat Message
         } else if packet_id == 0x01 {
-            println!("Joined!!")
+            println!("Joined!!");
             let id = packet.read_be_int_n(4);
-            println!("Id")
+            println!("Id");
             let gamemode = packet.read_be_uint_n(1);
-            println!("Gamemode")
+            println!("Gamemode");
             let dimension = packet.read_be_int_n(1);
-            println!("Dimm")
+            println!("Dimm");
             let difficulty = packet.read_be_uint_n(1);
-            println!("Diff")
+            println!("Diff");
             let players = packet.read_be_uint_n(1);
-            println!("Players")
+            println!("Players");
             //let level = packet.read_to_end();
             //println!("Data: {}", level)
             let level = packet.read_string();
-            println!("Join game: {} {} {} {} {} {}", id, gamemode, dimension, difficulty, players, level)
+            println!("Join game: {} {} {} {} {} {}", id, gamemode, dimension, difficulty, players, level);
         } else if packet_id == 0x06 {
-            println!("Food")
+            println!("Food");
             let health = packet.read_be_f32().unwrap();
             let food = packet.read_be_int_n(2).unwrap();
             let sat = packet.read_be_f32().unwrap();
-            println!("Health: {}, Food: {}, Saturation: {}", health, food, sat)
+            println!("Health: {}, Food: {}, Saturation: {}", health, food, sat);
         } else if packet_id == 0x0F {
-            println!("Mob spawn!")
+            println!("Mob spawn!");
             let id = packet.read_varint();
             let type_ = packet.read_be_uint_n(1).unwrap();
 
             let pos = Position{x: 0, y: 0, z: 0};
             let entity = Entity{pos: pos, kind: type_ as u8};
-            println!("Type of entity: {}", type_)
+            println!("Type of entity: {}", type_);
 
-            self.entities.insert(id as int, entity);
+            self.entities.insert(id as i64, entity);
 
             let mut p = Packet::new_out(0x02);
             p.write_be_i32(id);
             p.write_i8(1 as i8);
-            println!("Hitting: {}", type_)
+            println!("Hitting: {}", type_);
             self.write_packet(p);
 
-            println!("Id: {}, Type: {}", id, type_)
+            println!("Id: {}, Type: {}", id, type_);
         } else if packet_id == 0x15 {
             let id = packet.read_be_int_n(4).unwrap();
-            let entity = self.entities.get(&(id as int));
+            let entity = self.entities.get(&(id as i64));
             let mut p = Packet::new_out(0x02);
             p.write_be_i32(id as i32);
             p.write_i8(1 as i8);
-            println!("Hitting - don't move!: {}", entity.kind)
+            println!("Hitting - don't move!: {}", entity.kind);
             self.write_packet(p);
         } else if packet_id == 0x13 {
             let count = packet.read_varint();
             println!("Removing: {}", count);
         } else if packet_id == 0x05 {
-            println!("Spawn coord")
+            println!("Spawn coord");
             let x = packet.read_be_int_n(4);
             let y = packet.read_be_int_n(4);
             let z = packet.read_be_int_n(4);
-            println!("Spawn: {} {} {}", x, y, z)
+            println!("Spawn: {} {} {}", x, y, z);
         } else if packet_id == 0x2 {
             let json = packet.read_string();
             println!("Got chat message: {}", json);
@@ -327,7 +329,7 @@ impl Connection {
                 let user = j.find(&String::from_str("with")).unwrap().as_list().unwrap().get(0).find(&String::from_str("text")).unwrap().as_string().unwrap();
                 let msg = j.find(&String::from_str("with")).unwrap().as_list().unwrap().get(1).as_string().unwrap();
 
-                self.term.attr(term::attr::ForegroundColor(term::color::BRIGHT_GREEN));
+                self.term.fg(term::color::BRIGHT_GREEN);
                 //write!(&mut self.term as &mut Writer, "<{}> ", user);
                 self.term.write(user.as_bytes());
                 self.term.reset();
@@ -343,7 +345,7 @@ impl Connection {
                 msg.iter().map(|x| msg_vec.push(x.as_string().unwrap()));
                 let msg = msg_vec.concat();
 
-                self.term.attr(term::attr::ForegroundColor(term::color::BRIGHT_YELLOW));
+                self.term.fg(term::color::BRIGHT_YELLOW);
                 self.term.write(b"[Server] ");
                 self.term.reset();
 
@@ -362,7 +364,7 @@ impl Connection {
     }
 
     fn respawn(&mut self) {
-        println!("Respawning!")
+        println!("Respawning!");
         let mut p = Packet::new_out(0x16);
         p.write_u8(0);
         self.write_packet(p);
@@ -374,14 +376,14 @@ impl Connection {
         // Get all the data from the Encryption Request packet
         let server_id = packet.read_string();
         let key_len = packet.read_be_i16().unwrap();
-        let public_key = packet.read_exact(key_len as uint).unwrap();
+        let public_key = packet.read_exact(key_len as u8).unwrap();
         let token_len = packet.read_be_i16().unwrap();
-        let verify_token = packet.read_exact(token_len as uint).unwrap();
+        let verify_token = packet.read_exact(token_len as u8).unwrap();
 
         // Server's public key
-        println!("Still alive")
+        println!("Still alive");
         let mut pk = openssl::crypto::pkey::PKey::new();
-        println!("Loading")
+        println!("Loading");
 
         /*let header = "-----begin public key-----";
         let footer = "-----end public key-----";
@@ -390,21 +392,21 @@ impl Connection {
         let final = String::new().append(header).append(public_key.as_slice().to_base64(config).as_slice()).append(footer);*/
 
         pk.load_pub_bytes(public_key.as_slice());
-        println!("Loaded: {}", public_key.as_slice())
+        println!("Loaded: {}", public_key.as_slice());
 
         // Generate random 16 byte key
         let mut key = [0u8, ..16];
-        rand::task_rng().fill_bytes(key);
+        rand::thread_rng().fill_bytes(key);
 
         // Encrypt shared secret with server's public key
-        let ekey = pk.encrypt_with_padding(key, pkey::PKCS1v15);
-        println!("Encrypted")
+        let ekey = pk.encrypt_with_padding(key, pkey::EncryptionPadding::PKCS1v15);
+        println!("Encrypted");
 
         // Encrypt verify token with server's public key
-        let etoken = pk.encrypt_with_padding(verify_token.as_slice(), pkey::PKCS1v15);
+        let etoken = pk.encrypt_with_padding(verify_token.as_slice(), pkey::EncryptionPadding::PKCS1v15);
 
         // Generate the server id hash
-        let mut sha1 = Hasher::new(SHA1);
+        let mut sha1 = Hasher::new(Type::SHA1);
         sha1.update(server_id.as_bytes());
         sha1.update(key);
         sha1.update(public_key.as_slice());
@@ -444,8 +446,8 @@ impl Connection {
 
         // Get the plain TCP stream
         let sock = match self.sock.take_unwrap() {
-            Plain(s) => s,
-            _ => fail!("Expected plain socket!")
+            Sock::Plain(s) => s,
+            _ => panic!("Expected plain socket!")
         };
 
         println!("Wrapping");
@@ -456,7 +458,7 @@ impl Connection {
         // and put the new encrypted stream back
         // everything form this point is encrypted
         //
-        self.sock = Some(Encrypted(sock));
+        self.sock = Some(Sock::Encrypted(sock));
         println!("All done");
     }
 
@@ -489,7 +491,7 @@ impl Connection {
 
             let reason = packet.read_string();
             println!("Reason: {}", reason);
-            fail!("Received disconnect.");
+            panic!("Received disconnect.");
         }
 
         // Login Success
@@ -566,9 +568,9 @@ impl Connection {
 
         // Now the payload
         //println!("Reading payload")
-        let buf = match self.sock.read_exact(len as uint) {
+        let buf = match self.sock.read_exact(len as u8) {
             Ok(d) => d,
-            Err(err) => fail!("Error: {} - {}", err.kind.to_string(), err.desc)//return Err(format!("{} - {}", err.kind.to_string(), err.desc))
+            Err(err) => panic!("Error: {} - {}", err.kind.to_string(), err.desc)//return Err(format!("{} - {}", err.kind.to_string(), err.desc))
         };
 
         //println!("Buf: {}, {}", len, buf);
@@ -587,52 +589,52 @@ impl Connection {
 
 }
 
-impl Reader for Sock {
-    fn read(&mut self, buf: &mut [u8]) -> io::IoResult<uint> {
+impl Read for Sock {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match *self {
-            Plain(ref mut s) => s.read(buf),
-            Encrypted(ref mut s) => s.read(buf)
+            Sock::Plain(ref mut s) => s.read(buf),
+            Sock::Encrypted(ref mut s) => s.read(buf)
         }
     }
 }
 
-impl Writer for Sock {
-    fn write(&mut self, buf: &[u8]) -> io::IoResult<()> {
+impl Write for Sock {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match *self {
-            Plain(ref mut s) => s.write(buf),
-            Encrypted(ref mut s) => s.write(buf)
+            Sock::Plain(ref mut s) => s.write(buf),
+            Sock::Encrypted(ref mut s) => s.write(buf)
         }
     }
 
-    fn flush(&mut self) -> io::IoResult<()> {
+    fn flush(&mut self) -> io::Result<()> {
         match *self {
-            Plain(ref mut s) => s.flush(),
-            Encrypted(ref mut s) => s.flush()
+            Sock::Plain(ref mut s) => s.flush(),
+            Sock::Encrypted(ref mut s) => s.flush()
         }
     }
 }
 
-impl Reader for Option<Sock> {
-    fn read(&mut self, buf: &mut [u8]) -> io::IoResult<uint> {
+/*impl ReaderExtensions for Option<Sock> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<u64> {
         match *self {
             Some(ref mut s) => s.read(buf),
-            None => Err(io::standard_error(io::OtherIoError))
+            None => Err(Error::new(ErrorKind::Other, "error!"))
         }
     }
 }
 
-impl Writer for Option<Sock> {
-    fn write(&mut self, buf: &[u8]) -> io::IoResult<()> {
+impl WriterExtensions for Option<Sock> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<()> {
         match *self {
             Some(ref mut s) => s.write(buf),
-            None => Err(io::standard_error(io::OtherIoError))
+            None => Err(Error::new(ErrorKind::Other, "error!"))
         }
     }
 
-    fn flush(&mut self) -> io::IoResult<()> {
+    fn flush(&mut self) -> io::Result<()> {
         match *self {
             Some(ref mut s) => s.flush(),
-            None => Err(io::standard_error(io::OtherIoError))
+            None => Err(Error::new(ErrorKind::Other, "error!"))
         }
     }
-}
+}*/

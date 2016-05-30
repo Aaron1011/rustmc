@@ -6,6 +6,7 @@ use std::string::String;
 use std::str;
 use openssl::crypto::hash::{Hasher, Type};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use rustc_serialize::json;
 use rustc_serialize::json::Json;
@@ -180,11 +181,12 @@ impl Connection {
 
             let mut stdin = BufReader::new(io::stdin());
             for line in stdin.lines() {
-                match line {
+                chan.send(line.unwrap_or(String::from("")));
+            }
+                /*match line {
                     Ok(text) => chan.send(text),
                     _ => chan.send(String::from("")),
-                }
-            }
+                }*/
         });
 
         port
@@ -297,7 +299,13 @@ impl Connection {
             println!("Id: {}, Type: {}", id, type_);
         } else if packet_id == 0x15 {
             let id = packet.read_int::<BigEndian>(4).unwrap();
-            let entity = self.entities.get(&(id as i64));
+            /*let entity: &Entity = {
+                self.get_entity(id as i64);
+                //(&mut (self.entities)).get(&(id as i64)).unwrap()
+            };*/
+
+            let entity = self.get_entity(&id);
+
             let mut p = Packet::new_out(0x02);
             p.write_i32::<BigEndian>(id as i32);
             p.write_i8(1 as i8);
@@ -343,7 +351,7 @@ impl Connection {
             // Server Message
             } else if "chat.type.announcement" == ty {
 
-                let msg = j.find(&String::from("with")).unwrap().as_list().unwrap().get(1).find(&String::from("extra")).unwrap().as_list().unwrap();
+                let msg = j.find(&String::from("with")).unwrap().as_array().unwrap().get(1).unwrap().find(&String::from("extra")).unwrap().as_array().unwrap();
                 let mut msg_vec = Vec::new();
                 msg.iter().map(|x| msg_vec.push(x.as_string().unwrap()));
                 let msg = msg_vec.concat();
@@ -357,6 +365,10 @@ impl Connection {
 
             }
         }
+    }
+
+    fn get_entity(&self, id: &i64) -> &Entity {
+        return self.entities.get(id).unwrap()
     }
 
     fn send_username(&mut self) {
@@ -394,25 +406,25 @@ impl Connection {
 
         let final = String::new().append(header).append(public_key.as_str().to_base64(config).as_str()).append(footer);*/
 
-        pk.load_pub(public_key);
-        println!("Loaded: {}", public_key);
+        pk.load_pub(&public_key);
+        println!("Loaded: {:?}", &public_key);
 
         // Generate random 16 byte key
-        let mut key = [0u8, ..16];
-        rand::thread_rng().fill_bytes(&key);
+        let mut key = [0u8, 16];
+        rand::thread_rng().fill_bytes(&mut key);
 
         // Encrypt shared secret with server's public key
         let ekey = pk.encrypt_with_padding(&key, pkey::EncryptionPadding::PKCS1v15);
         println!("Encrypted");
 
         // Encrypt verify token with server's public key
-        let etoken = pk.encrypt_with_padding(verify_token.as_str(), pkey::EncryptionPadding::PKCS1v15);
+        let etoken = pk.encrypt_with_padding(&verify_token, pkey::EncryptionPadding::PKCS1v15);
 
         // Generate the server id hash
         let mut sha1 = Hasher::new(Type::SHA1);
         sha1.write_all(server_id.as_bytes());
-        sha1.write_all(key);
-        sha1.write_all(public_key.as_str());
+        sha1.write_all(&key);
+        sha1.write_all(&public_key);
         let hash = special_digest(sha1);
 
         println!("Hash: {}", hash);
@@ -428,14 +440,14 @@ impl Connection {
         println!("Writing");
 
         // Write encrypted shared secret
-        erp.write_be_i16(ekey.len() as i16);
-        erp.write(ekey.as_str());
+        erp.write_i16::<BigEndian>(ekey.len() as i16);
+        erp.write(ekey.as_slice());
 
         println!("And again");
 
         // Write encrypted verify token
-        erp.write_be_i16(etoken.len() as i16);
-        erp.write(etoken.as_str());
+        erp.write_i16::<BigEndian>(etoken.len() as i16);
+        erp.write(etoken.as_slice());
 
         println!("Sending");
 
@@ -449,14 +461,16 @@ impl Connection {
 
         // Get the plain TCP stream
         let sock = match self.sock {
-            Sock::Plain(s) => s,
+            Sock::Plain(ref s) => s,
             _ => panic!("Expected plain socket!")
         };
 
         println!("Wrapping");
 
         // and wwrap it in an AES Stream
-        let sock = crypto::AesStream::new(sock, Vec::from_slice(key));
+        let mut vec = Vec::new();
+        vec.extend_from_slice(&key);
+        let sock = crypto::AesStream::new(*sock, vec);
 
         // and put the new encrypted stream back
         // everything form this point is encrypted
@@ -531,7 +545,7 @@ impl Connection {
         p.write_string(self.host.as_str());
 
         // Server port
-        p.write_be_u16(self.port);
+        p.write_u16::<BigEndian>(self.port);
 
         // State
         // 1 - status, 2 - login
@@ -561,7 +575,7 @@ impl Connection {
         };*/
 
         // and the actual payload
-        self.sock.write(buf.as_str());
+        self.sock.write(buf.as_slice());
     }
 
     fn read_packet(&mut self) -> (i32, packet::InPacket) {
@@ -569,7 +583,7 @@ impl Connection {
         //println!("Reading length")
         let len = self.sock.read_varint();
 
-        let buf = Vec::new();
+        let mut buf = Vec::new();
         self.sock.take(len as u64).read_to_end(&mut buf);
 
 

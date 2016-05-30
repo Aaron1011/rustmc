@@ -30,15 +30,16 @@ pub type InPacket = Packet<In>;
 pub type OutPacket = Packet<Out>;
 
 pub struct Packet<T> {
-    pub buf: Either<Box<Read>, Box<Write>>,
+    pub buf: Either<Box<Read>, Vec<u8>>,
     phantom: PhantomData<T>
     //packetType: T
 }
 
 impl Packet<In> {
-    pub fn new_in(buf: Vec<u8>) -> Packet<In> {
+    pub fn new_in(data: Vec<u8>) -> Packet<In> {
         Packet {
-            buf: Either::Left(Box::new(BufReader::new(buf.as_slice()))),
+            buf: Either::Left(Box::new(BufReader::new(data.clone().into_boxed_slice()))),
+            phantom: PhantomData {}
             //packetType: In
         }
     }
@@ -47,7 +48,8 @@ impl Packet<In> {
 impl Packet<Out> {
     pub fn new_out(packet_id: i32) -> Packet<Out> {
         let mut p = Packet {
-            buf: Either::Right(Box::new(Vec::new())),
+            buf: Either::Right(Vec::new()),
+            phantom: PhantomData {}
             //packetType: Out
         };
         p.write_varint(packet_id);
@@ -56,7 +58,7 @@ impl Packet<Out> {
     }
 
     pub fn buf(self) -> Vec<u8> {
-        self.buf.unwrap_right();
+        return self.buf.unwrap_right();
     }
 }
 

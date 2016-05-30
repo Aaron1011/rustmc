@@ -1,6 +1,8 @@
 use std::io::{Read, Write};
 use std::str;
 
+use std::marker::Sized;
+
 use std::str::FromStr;
 
 use openssl::crypto::hash;
@@ -10,7 +12,7 @@ use serialize::hex::ToHex;
 
 //use crypto;
 
-pub fn special_digest(hasher: Hasher) -> String {
+pub fn special_digest(mut hasher: Hasher) -> String {
     let mut digest = hasher.finish();
 
     let neg = (digest.get(0).unwrap() & 0x80) == 0x80;
@@ -36,7 +38,7 @@ pub fn special_digest(hasher: Hasher) -> String {
 
 
     if neg {
-        let a = "-".to_string();
+        let mut a = "-".to_string();
         a.push_str(digest.as_str());
         a
     } else {
@@ -90,7 +92,7 @@ pub trait ReaderExtensions: Read {
 
     fn read_string(&mut self) -> String {
         let len = self.read_varint();
-        let buf = Vec::new();
+        let mut buf = Vec::new();
         self.take(len as u64).read_to_end(&mut buf);
 
         //let buf = repeat(0).take(len).collect::<Vec<_>>().as_mut_slice();
@@ -99,11 +101,11 @@ pub trait ReaderExtensions: Read {
         return String::from_utf8(buf).unwrap();
     }
 
-    fn read_len(&mut self, len: u64) -> &mut [u8] {
-        let buf = Vec::new();
+    fn read_len(&self, len: u64) -> Box<[u8]> where Self: Sized {
+        let mut buf = Vec::new();
         self.take(len).read_to_end(&mut buf);
 
-        buf.as_mut_slice();
+        return buf.into_boxed_slice();
     }
 }
 

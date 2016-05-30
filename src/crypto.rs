@@ -38,13 +38,13 @@ impl Read for AesStream {
             Err(_) => return Err(io::standard_error(io::OtherIoError))
         };*/
         let l = din.len();
-        buf.move_from(din, 0, l);
+        buf.clone_from_slice(&din);
 
         Ok(buf.len())
     }
 }
 
-impl  Write for AesStream {
+impl Write for AesStream {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let data = self.encrypt.update(buf);
         self.encrypt.finalize();

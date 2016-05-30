@@ -8,7 +8,7 @@ use std::str::FromStr;
 use openssl::crypto::hash;
 use openssl::crypto::hash::Hasher;
 
-use serialize::hex::ToHex;
+use rustc_serialize::hex::ToHex;
 
 //use crypto;
 
@@ -47,8 +47,10 @@ pub fn special_digest(mut hasher: Hasher) -> String {
 }
 
 pub trait WriterExtensions: Write {
-    fn write_varint(&mut self, mut x: i32) {
-        let mut buf = [0u8, 10];
+
+    #[allow(exceeding_bitshifts)]
+    fn write_varint(&mut self, mut x: u32) {
+        let mut buf = [0u8; 10];
         let mut i = 0;
         if x < 0 {
             x = x + (1 << 32);
@@ -60,11 +62,13 @@ pub trait WriterExtensions: Write {
         }
         buf[i] = x as u8;
 
-        self.write(&buf[i + 1 .. 10]);
+        println!("Sending buf: {:?}", buf);
+
+        self.write(&buf[(i + 1) .. 10]);
     }
 
     fn write_string(&mut self, s: &str) {
-        self.write_varint(s.len() as i32);
+        self.write_varint(s.len() as u32);
         self.write(s.as_bytes());
     }
 }
@@ -72,6 +76,7 @@ pub trait WriterExtensions: Write {
 impl<T: Write> WriterExtensions for T {}
 
 pub trait ReaderExtensions: Read {
+    #[allow(exceeding_bitshifts)]
     fn read_varint(&mut self) -> i32 {
         let (mut total, mut shift, mut val) = (0, 0, 0x80);
         let mut buf = [0; 1];
@@ -101,7 +106,7 @@ pub trait ReaderExtensions: Read {
         return String::from_utf8(buf).unwrap();
     }
 
-    fn read_len(&self, len: u64) -> Box<[u8]> where Self: Sized {
+    fn read_len(&mut self, len: u64) -> Box<[u8]> where Self: Sized {
         let mut buf = Vec::new();
         self.take(len).read_to_end(&mut buf);
 

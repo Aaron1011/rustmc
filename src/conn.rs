@@ -43,7 +43,7 @@ pub struct Entity {
 
 pub struct Connection {
     host: String,
-    sock: Sock,
+    sock: Option<Sock>,
     name: String,
     port: u16,
     term: Box<term::StdoutTerminal>,
@@ -79,7 +79,7 @@ impl Connection {
 
         Ok(Connection {
             host: String::from(host),
-            sock: Sock::Plain(sock),
+            sock: Some(Sock::Plain(sock)),
             name: String::from(name),
             port: port,
             term: t,
@@ -288,7 +288,7 @@ impl Connection {
             let entity = Entity{pos: pos, kind: type_ as u8};
             println!("Type of entity: {}", type_);
 
-            self.entities.insert(id as i64, entity);
+                self.entities.insert(id as i64, entity);
 
             let mut p = Packet::new_out(0x02);
             p.write_i32::<BigEndian>(id);
@@ -303,13 +303,14 @@ impl Connection {
                 self.get_entity(id as i64);
                 //(&mut (self.entities)).get(&(id as i64)).unwrap()
             };*/
-
-            let entity = self.get_entity(&id);
+            {
+                let entity = self.get_entity(&id);
+            }
 
             let mut p = Packet::new_out(0x02);
             p.write_i32::<BigEndian>(id as i32);
             p.write_i8(1 as i8);
-            println!("Hitting - don't move!: {}", entity.kind);
+            println!("Hitting - don't move!: {}", "Blah");
             self.write_packet(p);
         } else if packet_id == 0x13 {
             let count = packet.read_varint();
@@ -460,8 +461,8 @@ impl Connection {
         //let aes = crypto::AES::new(key.to_owned(), key.to_owned()).unwrap();
 
         // Get the plain TCP stream
-        let sock = match self.sock {
-            Sock::Plain(ref s) => s,
+        let sock = match self.sock.take().unwrap() {
+            Sock::Plain(s) => s,
             _ => panic!("Expected plain socket!")
         };
 
@@ -470,12 +471,12 @@ impl Connection {
         // and wwrap it in an AES Stream
         let mut vec = Vec::new();
         vec.extend_from_slice(&key);
-        let sock = crypto::AesStream::new(*sock, vec);
+        let sock = crypto::AesStream::new(sock, vec);
 
         // and put the new encrypted stream back
         // everything form this point is encrypted
         //
-        self.sock = Sock::Encrypted(sock);
+        self.sock = Some(Sock::Encrypted(sock));
         println!("All done");
     }
 
@@ -539,7 +540,7 @@ impl Connection {
         let mut p = Packet::new_out(0x0);
 
         // Protocol Version
-        p.write_varint(5);
+        p.write_varint(110);
 
         // Server host
         p.write_string(self.host.as_str());
@@ -558,8 +559,12 @@ impl Connection {
         // Get the actual buffer
         let buf = p.buf();
 
+        let new_sock = self.sock.as_mut().unwrap();
+        new_sock.write_varint(buf.len() as u32);
+        new_sock.write(buf.as_slice());
+
         // Write out the packet length
-        self.sock.write_varint(buf.len() as i32);
+        //self.sock.as_mut().unwrap().write_varint(buf.len() as i32);
         //
         /*let l = buf.len() as i32;
 
@@ -575,16 +580,16 @@ impl Connection {
         };*/
 
         // and the actual payload
-        self.sock.write(buf.as_slice());
+        //self.sock.as_mut().unwrap().write(buf.as_slice());
     }
 
     fn read_packet(&mut self) -> (i32, packet::InPacket) {
         // Read the packet length
         //println!("Reading length")
-        let len = self.sock.read_varint();
+        let len = self.sock.as_mut().unwrap().read_varint();
 
         let mut buf = Vec::new();
-        self.sock.take(len as u64).read_to_end(&mut buf);
+        self.sock.as_mut().unwrap().take(len as u64).read_to_end(&mut buf);
 
 
         // Now the payload

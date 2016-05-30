@@ -1,6 +1,5 @@
 extern crate getopts;
 extern crate term;
-extern crate serialize;
 extern crate openssl;
 extern crate rand;
 extern crate rustc_serialize;

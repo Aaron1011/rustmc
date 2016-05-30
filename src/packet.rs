@@ -1,5 +1,6 @@
 use std::io;
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::Cursor;
 use std::boxed::Box;
 use rustc_serialize::json;
 use util::Either;
@@ -30,7 +31,7 @@ pub type InPacket = Packet<In>;
 pub type OutPacket = Packet<Out>;
 
 pub struct Packet<T> {
-    pub buf: Either<Box<Read>, Vec<u8>>,
+    pub buf: Either<Cursor<Vec<u8>>, Vec<u8>>,
     phantom: PhantomData<T>
     //packetType: T
 }
@@ -38,7 +39,7 @@ pub struct Packet<T> {
 impl Packet<In> {
     pub fn new_in(data: Vec<u8>) -> Packet<In> {
         Packet {
-            buf: Either::Left(Box::new(BufReader::new(data.clone().into_boxed_slice()))),
+            buf: Either::Left(Cursor::new(data)),
             phantom: PhantomData {}
             //packetType: In
         }
@@ -48,11 +49,12 @@ impl Packet<In> {
 impl Packet<Out> {
     pub fn new_out(packet_id: i32) -> Packet<Out> {
         let mut p = Packet {
+            
             buf: Either::Right(Vec::new()),
             phantom: PhantomData {}
             //packetType: Out
         };
-        p.write_varint(packet_id);
+        p.write_varint(packet_id as u32);
 
         p
     }
@@ -63,11 +65,20 @@ impl Packet<Out> {
 }
 
 impl Read for Packet<In> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, dest: &mut [u8]) -> io::Result<usize> {
         match self.buf {
-            Either::Left(ref mut r) => r.read(buf),
+            Either::Left(ref mut r) => r.read(dest),
             Either::Right(..) => unreachable!()
         }
+        //self.buf.unwrap_left().read(dest)
+        //for (i, data) in self.buf.unwrap_left().iter().take(dest.len()).enumerate() {
+        //    dest[i] = *data;
+       // }
+        //Ok(dest.len())
+        /*match self.buf {
+            Either::Left(ref mut r) => r.read(buf),
+            Either::Right(..) => unreachable!()
+        }*/
     }
 }
 

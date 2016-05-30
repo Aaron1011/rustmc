@@ -48,13 +48,14 @@ impl Packet<In> {
 
 impl Packet<Out> {
     pub fn new_out(packet_id: i32) -> Packet<Out> {
+        println!("Creating packet with id {}", packet_id);
         let mut p = Packet {
-            
+             
             buf: Either::Right(Vec::new()),
             phantom: PhantomData {}
             //packetType: Out
         };
-        p.write_varint(packet_id as u32);
+        p.write_varint(packet_id as i32);
 
         p
     }

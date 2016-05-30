@@ -49,7 +49,7 @@ pub fn special_digest(mut hasher: Hasher) -> String {
 pub trait WriterExtensions: Write {
 
     #[allow(exceeding_bitshifts)]
-    fn write_varint(&mut self, mut x: u32) {
+    fn write_varint(&mut self, mut x: i32) {
         let mut buf = [0u8; 10];
         let mut i = 0;
         if x < 0 {
@@ -62,13 +62,13 @@ pub trait WriterExtensions: Write {
         }
         buf[i] = x as u8;
 
-        println!("Sending buf: {:?}", buf);
+        println!("Trying to write varint: {:?}", x);
 
-        self.write(&buf[(i + 1) .. 10]);
+        self.write(&buf[0 .. (i + 1)]);
     }
 
     fn write_string(&mut self, s: &str) {
-        self.write_varint(s.len() as u32);
+        self.write_varint(s.len() as i32);
         self.write(s.as_bytes());
     }
 }
@@ -78,10 +78,12 @@ impl<T: Write> WriterExtensions for T {}
 pub trait ReaderExtensions: Read {
     #[allow(exceeding_bitshifts)]
     fn read_varint(&mut self) -> i32 {
+        println!("Reading varint!");
         let (mut total, mut shift, mut val) = (0, 0, 0x80);
         let mut buf = [0; 1];
         while (val & 0x80) != 0 {
             self.read_exact(&mut buf);
+            println!("Read into buf: {:?}", buf);
             val = buf[0] as i32;
             total = total | ((val & 0x7F) << shift);
             shift = shift + 7;
@@ -97,8 +99,13 @@ pub trait ReaderExtensions: Read {
 
     fn read_string(&mut self) -> String {
         let len = self.read_varint();
+
+        println!("Read string length of {:?}", len);
+
         let mut buf = Vec::new();
         self.take(len as u64).read_to_end(&mut buf);
+
+        println!("Real string buffer len is {:?}", buf.len());
 
         //let buf = repeat(0).take(len).collect::<Vec<_>>().as_mut_slice();
         //let a = self.read_exact(buf);
@@ -110,6 +117,7 @@ pub trait ReaderExtensions: Read {
         let mut buf = Vec::new();
         self.take(len).read_to_end(&mut buf);
 
+        println!("buf len = {}, parameter len = {}", buf.len(), len);
         return buf.into_boxed_slice();
     }
 }

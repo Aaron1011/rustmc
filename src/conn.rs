@@ -7,6 +7,7 @@ use std::str;
 use openssl::crypto::hash::{Hasher, Type};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::process::Stdio;
 
 use rustc_serialize::json;
 use rustc_serialize::json::Json;
@@ -99,9 +100,13 @@ impl Connection {
             .. process::ProcessConfig::new()
         };*/
         //let mut p = process::Process::configure(c).unwrap();
+        //
+        println!("Authenticating!");
 
         let mut p = match Command::new("/usr/bin/curl").
             args(&["-d".to_string(), "@-".to_string(), "-H".to_string(), "Content-Type:application/json".to_string(), url]).
+            stdin(Stdio::piped()).
+            stdout(Stdio::piped()).
             spawn() {
                 Ok(p) => p,
                 Err(e) => panic!("paniced to execute process: {}", e)
@@ -112,15 +117,15 @@ impl Connection {
             Err(e) => panic!("Error: {}", e)
         }*/
         // write json to stdin and close it
-        p.stdin.unwrap().write(format!(r#"
-            {{
-                "agent": {{
+        p.stdin.unwrap().write(r#"
+            {
+                "agent": {
                     "name": "Minecraft",
                     "version": 1
-                }},
-                "username": "{}",
-                "password": "{}"
-            }}"#, "Aaron1011", "xxx").as_bytes());
+                },
+                "username": "aaaaa",
+                "password": "bbbb"
+            }"#.as_bytes());
         p.stdin = None;
 
         // read response
@@ -149,6 +154,8 @@ impl Connection {
 
         let mut p = match Command::new("/usr/bin/curl").
             args(&["-d".to_string(), "@-".to_string(), "-H".to_string(), "Content-Type:application/json".to_string(), url]).
+            stdin(Stdio::piped()).
+            stdout(Stdio::piped()).
             spawn() {
                 Ok(p) => p,
                 Err(e) => panic!("paniced to execute process: {}", e)
@@ -391,9 +398,11 @@ impl Connection {
 
         // Get all the data from the Encryption Request packet
         let server_id = packet.read_string();
-        let key_len = packet.read_i16::<BigEndian>().unwrap();
+        println!("Server id len {} - {}", server_id.len(), server_id);
+        let key_len = packet.read_varint();
+        println!("Key len: {:?} As u32: {:?}", key_len, key_len as u32);
         let public_key = packet.read_len(key_len as u64);
-        let token_len = packet.read_i16::<BigEndian>().unwrap();
+        let token_len = packet.read_varint();
         let verify_token = packet.read_len(token_len as u64);
 
         // Server's public key
@@ -540,7 +549,7 @@ impl Connection {
         let mut p = Packet::new_out(0x0);
 
         // Protocol Version
-        p.write_varint(110);
+        p.write_varint(47);
 
         // Server host
         p.write_string(self.host.as_str());
@@ -559,8 +568,10 @@ impl Connection {
         // Get the actual buffer
         let buf = p.buf();
 
+        println!("Writing packet: {:?}", buf);
+
         let new_sock = self.sock.as_mut().unwrap();
-        new_sock.write_varint(buf.len() as u32);
+        new_sock.write_varint(buf.len() as i32);
         new_sock.write(buf.as_slice());
 
         // Write out the packet length

@@ -8,6 +8,8 @@ use openssl::crypto::hash::{Hasher, Type};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::process::Stdio;
+use std::thread::sleep;
+use std::time::Duration;
 
 use rustc_serialize::json;
 use rustc_serialize::json::Json;
@@ -123,8 +125,8 @@ impl Connection {
                     "name": "Minecraft",
                     "version": 1
                 },
-                "username": "aaaaa",
-                "password": "bbbb"
+                "username": "xxx",
+                "password": "yyyyy"
             }"#.as_bytes());
         p.stdin = None;
 
@@ -256,11 +258,11 @@ impl Connection {
     fn handle_message(&mut self, packet_id: i32, packet: &mut packet::InPacket) {
         // Keep Alive
         if packet_id == 0x0 {
-            let x = packet.read_i32::<BigEndian>().unwrap();
+            let x = packet.read_varint();
 
             // Need to respond
             let mut resp = Packet::new_out(0x0);
-            resp.write_i32::<BigEndian>(x);
+            resp.write_varint(x);
             self.write_packet(resp);
 
         // Chat Message
@@ -279,7 +281,9 @@ impl Connection {
             //let level = packet.read_to_end();
             //println!("Data: {}", level)
             let level = packet.read_string();
-            println!("Join game: {:?} {:?} {:?} {:?} {:?} {:?}", id, gamemode, dimension, difficulty, players, level);
+
+            let reduced_debug = packet.read_uint::<BigEndian>(1).unwrap();
+            println!("Join game: {:?} {:?} {:?} {:?} {:?} {:?} {:?}", id, gamemode, dimension, difficulty, players, level, reduced_debug);
         } else if packet_id == 0x06 {
             println!("Food");
             let health = packet.read_f32::<BigEndian>().unwrap();
@@ -297,11 +301,15 @@ impl Connection {
 
                 self.entities.insert(id as i64, entity);
 
-            let mut p = Packet::new_out(0x02);
-            p.write_i32::<BigEndian>(id);
-            p.write_i8(1 as i8);
-            println!("Hitting: {}", type_);
-            self.write_packet(p);
+            //let mut p = Packet::new_out(0x02);
+            //p.write_varint(id);
+            //p.write_varint(1);
+
+
+            //p.write_i32::<BigEndian>(id);
+            //p.write_i8(1 as i8);
+            //println!("Hitting: {}", type_);
+            //self.write_packet(p);
 
             println!("Id: {}, Type: {}", id, type_);
         } else if packet_id == 0x15 {
@@ -311,23 +319,25 @@ impl Connection {
                 //(&mut (self.entities)).get(&(id as i64)).unwrap()
             };*/
             {
-                let entity = self.get_entity(&id);
+                //let entity = self.get_entity(&id);
             }
 
-            let mut p = Packet::new_out(0x02);
-            p.write_i32::<BigEndian>(id as i32);
-            p.write_i8(1 as i8);
-            println!("Hitting - don't move!: {}", "Blah");
-            self.write_packet(p);
+            //let mut p = Packet::new_out(0x02);
+            //p.write_varint(id as i32);
+            //p.write_varint(1);
+            //println!("Hitting - don't move!: {}", "Blah");
+            //self.write_packet(p);
         } else if packet_id == 0x13 {
             let count = packet.read_varint();
             println!("Removing: {}", count);
         } else if packet_id == 0x05 {
             println!("Spawn coord");
-            let x = packet.read_int::<BigEndian>(4).unwrap();
+            /*let x = packet.read_int::<BigEndian>(4).unwrap();
             let y = packet.read_int::<BigEndian>(4).unwrap();
-            let z = packet.read_int::<BigEndian>(4).unwrap();
-            println!("Spawn: {} {} {}", x, y, z);
+            let z = packet.read_int::<BigEndian>(4).unwrap();*/
+
+            let full = packet.read_u64::<BigEndian>();
+            println!("Spawn: {:?}", full);
         } else if packet_id == 0x2 {
             let json = packet.read_string();
             println!("Got chat message: {}", json);
@@ -388,6 +398,9 @@ impl Connection {
 
     fn respawn(&mut self) {
         println!("Respawning!");
+        println!("Sleeping!");
+        //sleep(Duration::new(1, 0));
+        println!("Done!");
         let mut p = Packet::new_out(0x16);
         p.write_u8(0);
         self.write_packet(p);
@@ -522,6 +535,7 @@ impl Connection {
         }
 
         // Login Success
+        println!("Packet id: {}", packet_id);
         assert_eq!(packet_id, 0x2);
         let uuid = packet.read_string();
         let username = packet.read_string();
@@ -567,8 +581,6 @@ impl Connection {
     fn write_packet(&mut self, p: packet::OutPacket) {
         // Get the actual buffer
         let buf = p.buf();
-
-        println!("Writing packet: {:?}", buf);
 
         let new_sock = self.sock.as_mut().unwrap();
         new_sock.write_varint(buf.len() as i32);

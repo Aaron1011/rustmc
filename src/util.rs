@@ -52,9 +52,9 @@ pub trait WriterExtensions: Write {
     fn write_varint(&mut self, mut x: i32) {
         let mut buf = [0u8; 10];
         let mut i = 0;
-        if x < 0 {
+        /*if x < 0 {
             x = x + (1 << 32);
-        }
+        }*/
         while x >= 0x80 {
             buf[i] = (x & 0x7F) as u8 | 0x80;
             x = x >> 7;
@@ -78,12 +78,10 @@ impl<T: Write> WriterExtensions for T {}
 pub trait ReaderExtensions: Read {
     #[allow(exceeding_bitshifts)]
     fn read_varint(&mut self) -> i32 {
-        println!("Reading varint!");
         let (mut total, mut shift, mut val) = (0, 0, 0x80);
         let mut buf = [0; 1];
         while (val & 0x80) != 0 {
             self.read_exact(&mut buf);
-            println!("Read into buf: {:?}", buf);
             val = buf[0] as i32;
             total = total | ((val & 0x7F) << shift);
             shift = shift + 7;
@@ -100,12 +98,8 @@ pub trait ReaderExtensions: Read {
     fn read_string(&mut self) -> String {
         let len = self.read_varint();
 
-        println!("Read string length of {:?}", len);
-
         let mut buf = Vec::new();
         self.take(len as u64).read_to_end(&mut buf);
-
-        println!("Real string buffer len is {:?}", buf.len());
 
         //let buf = repeat(0).take(len).collect::<Vec<_>>().as_mut_slice();
         //let a = self.read_exact(buf);
